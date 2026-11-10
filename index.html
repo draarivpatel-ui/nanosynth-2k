@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>NanoSynth-2K - Wave Optics and Physical Synthesis Workbench</title>
+<style>
+  :root{
+    --bg:#070b16;--panel:#101a2e;--panel2:#0c1424;--line:#22365a;
+    --ink:#d5e8ff;--dim:#7f9bc4;--accent:#4fd6c9;--accent2:#ffb347;--warn:#e0556b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  a{color:var(--accent)}
+  header{padding:16px 20px;border-bottom:1px solid var(--line);
+    display:flex;flex-wrap:wrap;gap:12px;align-items:baseline}
+  header h1{font-size:18px;margin:0;letter-spacing:.5px}
+  header h1 span{color:var(--accent)}
+  header p{margin:0;color:var(--dim);font-size:12px;max-width:60ch}
+  header .tag{margin-left:auto;font-size:11px;color:var(--dim);border:1px solid var(--line);
+    padding:2px 8px;border-radius:10px}
+  main{display:grid;grid-template-columns:minmax(340px,1.2fr) minmax(300px,.9fr);
+    gap:16px;padding:16px;align-items:start}
+  @media(max-width:880px){main{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:14px;margin-bottom:16px}
+  .card h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);
+    margin:0 0 12px}
+  canvas{display:block;width:100%;height:auto;image-rendering:pixelated;
+    background:#04070f;border:1px solid var(--line);border-radius:4px;cursor:crosshair;touch-action:none}
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+  .row label{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--dim);flex:1;min-width:96px}
+  .row label b{color:var(--ink);font-weight:400}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  input[type=number],input[type=text],select,textarea{font:inherit;background:var(--panel2);
+    color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px 6px;width:100%}
+  textarea{resize:vertical;min-height:74px;font-size:11px}
+  button{font:inherit;background:#182a49;color:var(--ink);border:1px solid var(--line);
+    border-radius:4px;padding:5px 10px;cursor:pointer}
+  button:hover{background:#22385f;border-color:#3a5b8c}
+  button.primary{background:#144b47;border-color:#1c6f68;color:#bff7ee}
+  button.primary:hover{background:#1a615b}
+  button.warn{background:#4a2030;border-color:#7a3348;color:#ffc9d3}
+  #audioBtn{font-weight:700;min-width:118px}
+  #audioBtn.off{background:#4a2030;border-color:#7a3348;color:#ffc9d3}
+  #audioBtn.on{background:#144b2b;border-color:#1c6f3f;color:#c2f7cf}
+  .stat{display:flex;justify-content:space-between;font-size:12px;padding:2px 0;
+    border-bottom:1px dotted var(--line)}
+  .stat span:last-child{color:var(--accent)}
+  .legend{font-size:11px;color:var(--dim);margin-top:8px}
+  .pill{display:inline-block;font-size:10px;padding:1px 7px;border:1px solid var(--line);
+    border-radius:10px;margin:2px 3px 0 0;cursor:pointer}
+  .pill:hover{border-color:var(--accent);color:var(--accent)}
+  .note{font-size:11px;color:var(--dim)}
+  .kbd{background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:0 4px}
+  .wave{display:block;width:100%;height:64px;background:var(--panel2);
+    border:1px solid var(--line);border-radius:4px;margin-top:8px}
+  footer{padding:14px 20px;border-top:1px solid var(--line);color:var(--dim);font-size:11px}
+  code{color:var(--accent2)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Nano<span>Synth</span>-2K</h1>
+  <p>A 2D wave interference optics bench and a Karplus-Strong / FM synthesizer that share one
+     deterministic state. All math is local, zero dependencies, and audio stays muted until you ask for it.</p>
+  <span class="tag" id="verTag">v1.0.0</span>
+</header>
+
+<main>
+  <section>
+    <div class="card">
+      <h2>Interference field</h2>
+      <canvas id="field" width="400" height="240"></canvas>
+      <div class="legend">Drag a glowing dot to move a source. Bright ridges are constructive
+        interference; dark bands are destructive. Amplitude falls as one over the square root of distance.</div>
+      <div class="row" style="margin-top:12px">
+        <label>Wavelength <span><b id="wlVal">26</b> px</span>
+          <input id="wl" type="range" min="6" max="120" step="1" value="26"></label>
+        <label>Spreading <span><b id="spVal">0.004</b></span>
+          <input id="sp" type="range" min="0" max="0.05" step="0.001" value="0.004"></label>
+      </div>
+      <div class="row">
+        <label>Phase B <span><b id="phVal">0.00</b> rad</span>
+          <input id="ph" type="range" min="-6.28" max="6.28" step="0.01" value="0"></label>
+        <label>Amplitude B <span><b id="amVal">1.00</b></span>
+          <input id="am" type="range" min="0" max="2" step="0.01" value="1"></label>
+      </div>
+      <div class="row">
+        <label>Sources
+          <select id="srcCount"><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
+        <label>Palette
+          <select id="palette"><option value="ice">Ice</option><option value="ember">Ember</option><option value="mono">Mono</option></select></label>
+        <label>Field resolution
+          <select id="step"><option value="1">Full</option><option value="2" selected>Half</option><option value="3">Third</option></select></label>
+        <label>Animate
+          <button id="animBtn" style="width:100%">Play motion</button></label>
+      </div>
+      <div class="row">
+        <span class="pill" data-preset="young">Young double slit</span>
+        <span class="pill" data-preset="antiphase">Antiphase pair</span>
+        <span class="pill" data-preset="quad">Quad array</span>
+        <span class="pill" data-preset="grating">Three slit</span>
+      </div>
+      <div style="margin-top:10px">
+        <div class="stat"><span>Pointer intensity</span><span id="sInt">0.000</span></div>
+        <div class="stat"><span>Path difference (A - B)</span><span id="sPath">0.00 px</span></div>
+        <div class="stat"><span>Fringe verdict</span><span id="sVerdict">-</span></div>
+        <div class="stat"><span>Fringe spacing at 400 px</span><span id="sFringe">0.00 px</span></div>
+        <div class="stat"><span>Field max / mean</span><span id="sField">0 / 0</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Deterministic state</h2>
+      <div class="note">The whole bench is one canonical JSON object. Equal objects always
+        serialize to identical bytes and identical hashes.</div>
+      <div class="row" style="margin-top:8px">
+        <button id="copyState">Copy state JSON</button>
+        <button id="copyUri">Copy standalone data URI</button>
+        <button id="loadState">Load from text box</button>
+        <button id="resetState" class="warn">Reset</button>
+      </div>
+      <textarea id="stateBox" spellcheck="false"></textarea>
+      <div class="stat" style="margin-top:8px"><span>State hash (FNV-1a)</span><span id="sHash">-</span></div>
+      <div class="stat"><span>Serialized bytes</span><span id="sBytes">0</span></div>
+      <div class="note" id="stateMsg" style="margin-top:6px">Ready.</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="card">
+      <h2>Audio (muted until you click)</h2>
+      <div class="row">
+        <button id="audioBtn" class="off">Audio: OFF</button>
+        <button id="playBtn" class="primary">Pluck / Play</button>
+        <button id="wavBtn">Download WAV</button>
+      </div>
+      <div class="note">No AudioContext is constructed on page load. Clicking the toggle is the
+        only thing that can create or resume audio. Press <span class="kbd">Space</span> to play
+        while audio is on.</div>
+      <div class="row" style="margin-top:12px">
+        <label>Voice
+          <select id="mode"><option value="ks">Karplus-Strong</option><option value="fm">FM</option></select></label>
+        <label>Frequency <span><b id="freqVal">220.0</b> Hz</span>
+          <input id="freq" type="range" min="55" max="1760" step="0.1" value="220"></label>
+      </div>
+      <div class="row">
+        <label>Note <span><b id="noteVal">A3</b></span>
+          <input id="midi" type="range" min="24" max="96" step="1" value="57"></label>
+        <label>Level <span><b id="ampVal">0.80</b></span>
+          <input id="amp" type="range" min="0" max="1" step="0.01" value="0.8"></label>
+      </div>
+      <div class="row" id="ksRow">
+        <label>String damping <span><b id="dampVal">0.996</b></span>
+          <input id="damp" type="range" min="0.9" max="1" step="0.001" value="0.996"></label>
+        <label>Noise seed
+          <input id="seed" type="number" min="0" max="4294967295" value="1337"></label>
+      </div>
+      <div class="row" id="fmRow" style="display:none">
+        <label>Mod ratio <span><b id="ratioVal">2.0</b></span>
+          <input id="ratio" type="range" min="0.5" max="8" step="0.1" value="2"></label>
+        <label>Mod index <span><b id="indexVal">3.0</b></span>
+          <input id="index" type="range" min="0" max="12" step="0.1" value="3"></label>
+      </div>
+      <div class="row">
+        <label>Duration <span><b id="durVal">1.0</b> s</span>
+          <input id="dur" type="range" min="0.1" max="4" step="0.1" value="1"></label>
+        <label>Sample rate
+          <select id="sr"><option value="22050">22050</option><option value="44100" selected>44100</option><option value="48000">48000</option></select></label>
+      </div>
+      <canvas id="wave" class="wave" width="600" height="128"></canvas>
+      <div class="stat" style="margin-top:8px"><span>Peak / RMS</span><span id="sLevel">0 / 0</span></div>
+      <div class="stat"><span>Detected period lag</span><span id="sLag">-</span></div>
+      <div class="stat"><span>Estimated pitch</span><span id="sPitch">-</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Standalone build</h2>
+      <div class="note"><code>shrink.html</code> is the same sandbox packed into one file under
+        2,950 bytes. <code>DATA_URI.txt</code> holds the copyable
+        <code>data:text/html,...</code> version under 3,072 bytes. Both keep audio off on load.</div>
+      <div class="row" style="margin-top:8px">
+        <a href="shrink.html" target="_blank" rel="noopener"><button>Open shrink.html</button></a>
+        <button id="verifyBtn">Verify byte budgets</button>
+      </div>
+      <div class="stat"><span>shrink.html bytes</span><span id="vHtml">-</span></div>
+      <div class="stat"><span>data uri bytes</span><span id="vUri">-</span></div>
+      <div class="stat"><span>audio off in source</span><span id="vAudio">-</span></div>
+      <div class="note" id="verifyMsg" style="margin-top:6px">Not checked yet.</div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  NanoSynth-2K, a zero dependency browser instrument. Wave optics use a coherent phasor sum;
+  the string voice is a damped Karplus-Strong delay line; the FM voice is a two operator sine pair.
+  Everything runs from checked in source with no build step.
+</footer>
+
+<script src="src/nanosynth.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
