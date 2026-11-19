@@ -302,6 +302,7 @@
   function merge(dst, src) {
     for (var k in src) {
       if (!Object.prototype.hasOwnProperty.call(src, k)) continue;
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
       var v = src[k];
       if (v && typeof v === 'object' && !Array.isArray(v) &&
           dst[k] && typeof dst[k] === 'object' && !Array.isArray(dst[k])) {
