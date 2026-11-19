@@ -45,9 +45,13 @@
   }
 
   function readControls() {
+    var sources = state.sources.map(function (s, i) {
+      return i === 1 ?
+        { x: s.x, y: s.y, amplitude: $('am').value, phase: $('ph').value } : s;
+    });
     state = N.createState({
       audioOn: audioOn,
-      sources: state.sources,
+      sources: sources,
       optics: {
         wavelength: $('wl').value,
         spreading: $('sp').value,
