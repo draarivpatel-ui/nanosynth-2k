@@ -441,6 +441,14 @@ test('deserializeState round trips through serializeState', () => {
   assert.equal(N.stateHash(t), N.stateHash(s));
 });
 
+test('deserializeState ignores __proto__ keys instead of polluting Object.prototype', () => {
+  N.deserializeState('{"__proto__":{"nsPolluted":1},"optics":{"__proto__":{"nsPolluted2":1}}}');
+  assert.equal(({}).nsPolluted, undefined);
+  assert.equal(({}).nsPolluted2, undefined);
+  delete Object.prototype.nsPolluted;
+  delete Object.prototype.nsPolluted2;
+});
+
 test('deserializeState canonicalizes messy input', () => {
   const t = N.deserializeState('{"b":2,"a":1,"synth":{"frequency":-5}}');
   assert.equal(t.synth.frequency, 20);
