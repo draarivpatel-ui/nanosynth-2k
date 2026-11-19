@@ -195,6 +195,7 @@
     var n = Math.max(1, Math.floor(sr * dur));
     var N = Math.max(2, Math.round(sr / freq));
     var damping = clamp(opts.damping === undefined ? 0.996 : opts.damping, 0, 1);
+    var amp = clamp(opts.amplitude === undefined ? 1 : opts.amplitude, 0, 1);
     var seed = opts.seed === undefined ? 1337 : (opts.seed >>> 0);
     var rand = rng(seed);
     var line = new Float64Array(N);
@@ -204,7 +205,7 @@
     for (var j = 0; j < n; j++) {
       var cur = line[idx];
       var nxt = line[(idx + 1) % N];
-      out[j] = cur;
+      out[j] = amp * cur;
       line[idx] = 0.5 * (cur + nxt) * damping;
       idx = (idx + 1) % N;
     }
