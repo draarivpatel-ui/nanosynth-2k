@@ -242,6 +242,14 @@ test('karplusStrong returns the expected sample count', () => {
   assert.equal(b.length, 2000);
 });
 
+test('karplusStrong scales output by amplitude and defaults to full level', () => {
+  const full = N.karplusStrong({ duration: 0.05 });
+  const half = N.karplusStrong({ duration: 0.05, amplitude: 0.5 });
+  assert.equal(half.length, full.length);
+  for (let i = 0; i < full.length; i++) assert.equal(half[i], 0.5 * full[i]);
+  assert.equal(N.peak(N.karplusStrong({ duration: 0.05, amplitude: 0 })), 0);
+});
+
 test('karplusStrong is bit for bit deterministic for the same seed', () => {
   const o = { frequency: 220, duration: 0.1, sampleRate: 22050, seed: 42 };
   assert.deepEqual(Array.from(N.karplusStrong(o)), Array.from(N.karplusStrong(o)));
