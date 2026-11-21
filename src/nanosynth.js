@@ -31,6 +31,9 @@
   function roundTo(v, digits) {
     var f = Math.pow(10, digits === undefined ? 6 : digits);
     var r = Math.round(Number(v) * f) / f;
+    /* Rounding a huge finite number can overflow to Infinity; keep the
+       original value rather than emitting a non finite result. */
+    if (!isFinite(r)) return v;
     return Object.is(r, -0) ? 0 : r;
   }
 
@@ -51,8 +54,11 @@
     return Math.hypot(x2 - x1, y2 - y1);
   }
 
+  /* Non positive or non finite wavelengths are meaningless; treat them as a
+     one unit wavelength so every downstream phasor stays finite. */
   function waveNumber(wavelength) {
-    return TAU / wavelength;
+    var w = Number(wavelength);
+    return TAU / ((w > 0 && isFinite(w)) ? w : 1);
   }
 
   function frequencyToWavelength(freq, speed) {
@@ -63,17 +69,24 @@
     return (speed === undefined ? SPEED_OF_SOUND : speed) / wavelength;
   }
 
+  /* Every public optics entry point repairs non finite inputs instead of
+     propagating NaN into pixels or audio. */
+  function num(v, d) {
+    v = Number(v);
+    return isFinite(v) ? v : d;
+  }
+
   function sourcePhase(source, x, y, k, t, omega) {
-    var d = distance(source.x, source.y, x, y);
-    return k * d - omega * t + (source.phase || 0);
+    var d = distance(num(source.x, 0), num(source.y, 0), num(x, 0), num(y, 0));
+    return num(k, 0) * d - num(omega, 0) * num(t, 0) + num(source.phase, 0);
   }
 
   function waveDisplacement(source, x, y, k, t, omega, spreading) {
-    var d = distance(source.x, source.y, x, y);
-    var s = spreading === undefined ? 0 : spreading;
-    var a = (source.amplitude === undefined ? 1 : source.amplitude) /
+    var d = distance(num(source.x, 0), num(source.y, 0), num(x, 0), num(y, 0));
+    var s = Math.max(0, num(spreading, 0));
+    var a = num(source.amplitude === undefined ? 1 : source.amplitude, 1) /
       Math.sqrt(1 + s * d);
-    return a * Math.sin(k * d - omega * t + (source.phase || 0));
+    return a * Math.sin(num(k, 0) * d - num(omega, 0) * num(t, 0) + num(source.phase, 0));
   }
 
   function superpose(sources, x, y, wavelength, t, omega, spreading) {
@@ -88,15 +101,16 @@
   /* Coherent phasor sum. Time independent for sources sharing one frequency. */
   function phasorAt(sources, x, y, wavelength, spreading) {
     var k = waveNumber(wavelength);
-    var s = spreading === undefined ? 0 : spreading;
+    var s = Math.max(0, num(spreading, 0));
+    var px = num(x, 0), py = num(y, 0);
     var re = 0;
     var im = 0;
     for (var i = 0; i < sources.length; i++) {
       var src = sources[i];
-      var d = distance(src.x, src.y, x, y);
-      var a = (src.amplitude === undefined ? 1 : src.amplitude) /
+      var d = distance(num(src.x, 0), num(src.y, 0), px, py);
+      var a = num(src.amplitude === undefined ? 1 : src.amplitude, 1) /
         Math.sqrt(1 + s * d);
-      var p = k * d + (src.phase || 0);
+      var p = k * d + num(src.phase, 0);
       re += a * Math.cos(p);
       im += a * Math.sin(p);
     }
@@ -109,9 +123,12 @@
   }
 
   function intensityField(sources, width, height, wavelength, step, spreading) {
-    step = step || 2;
-    var w = Math.max(1, Math.floor(width));
-    var h = Math.max(1, Math.floor(height));
+    step = Math.floor(step);
+    if (!(step >= 1)) step = 2;
+    /* Cap each dimension so a hostile or corrupted request cannot ask for
+       an unbounded typed array. */
+    var w = Math.max(1, Math.min(Math.floor(Number(width)) || 1, 2000));
+    var h = Math.max(1, Math.min(Math.floor(Number(height)) || 1, 2000));
     var cols = Math.floor(w / step);
     var rows = Math.floor(h / step);
     var data = new Float64Array(cols * rows);
@@ -136,6 +153,7 @@
 
   /* Path difference against the first source. Two sources give a scalar. */
   function pathDifference(sources, x, y) {
+    if (!Array.isArray(sources) || sources.length < 2) return 0;
     var d0 = distance(sources[0].x, sources[0].y, x, y);
     var diffs = [];
     for (var i = 1; i < sources.length; i++) {
@@ -195,16 +213,31 @@
     var n = Math.max(1, Math.floor(sr * dur));
     var N = Math.max(2, Math.round(sr / freq));
     var damping = clamp(opts.damping === undefined ? 0.996 : opts.damping, 0, 1);
+    var amp = clamp(opts.amplitude === undefined ? 1 : opts.amplitude, 0, 1);
     var seed = opts.seed === undefined ? 1337 : (opts.seed >>> 0);
     var rand = rng(seed);
     var line = new Float64Array(N);
-    for (var i = 0; i < N; i++) line[i] = 2 * rand() - 1;
+    /* Zero-mean the excitation noise: a nonzero mean survives as a DC
+       offset under the lossy feedback loop and pollutes level meters.
+       Rescale afterwards so centering can never push a sample past one. */
+    var mean = 0;
+    for (var i = 0; i < N; i++) { line[i] = 2 * rand() - 1; mean += line[i]; }
+    mean /= N;
+    var excPeak = 0;
+    for (i = 0; i < N; i++) {
+      line[i] -= mean;
+      var av = Math.abs(line[i]);
+      if (av > excPeak) excPeak = av;
+    }
+    if (excPeak > 1) {
+      for (i = 0; i < N; i++) line[i] /= excPeak;
+    }
     var out = new Float64Array(n);
     var idx = 0;
     for (var j = 0; j < n; j++) {
       var cur = line[idx];
       var nxt = line[(idx + 1) % N];
-      out[j] = cur;
+      out[j] = cur * amp;
       line[idx] = 0.5 * (cur + nxt) * damping;
       idx = (idx + 1) % N;
     }
@@ -212,8 +245,14 @@
   }
 
   function fmSample(t, carrier, modulator, index, amp) {
-    amp = amp === undefined ? 1 : amp;
-    return amp * Math.sin(TAU * carrier * t + index * Math.sin(TAU * modulator * t));
+    amp = num(amp === undefined ? 1 : amp, 0);
+    t = num(t, 0);
+    carrier = Math.max(0, num(carrier, 0));
+    modulator = Math.max(0, num(modulator, 0));
+    index = num(index, 0);
+    var arg = TAU * carrier * t + index * Math.sin(TAU * modulator * t);
+    if (!isFinite(arg)) return 0;
+    return amp * Math.sin(arg);
   }
 
   function fmBuffer(opts) {
@@ -236,34 +275,45 @@
 
   function rms(buf) {
     var s = 0;
-    for (var i = 0; i < buf.length; i++) s += buf[i] * buf[i];
+    for (var i = 0; i < buf.length; i++) {
+      var v = num(buf[i], 0);
+      s += v * v;
+    }
     return buf.length ? Math.sqrt(s / buf.length) : 0;
   }
 
   function peak(buf) {
     var p = 0;
-    for (var i = 0; i < buf.length; i++) p = Math.max(p, Math.abs(buf[i]));
+    for (var i = 0; i < buf.length; i++) p = Math.max(p, Math.abs(num(buf[i], 0)));
     return p;
   }
 
   function autocorrelation(buf, lag) {
     var n = buf.length;
-    if (lag < 0 || lag >= n) return 0;
-    var num = 0;
+    lag = Math.floor(Number(lag));
+    if (!(lag >= 0) || lag >= n) return 0;
+    var acc = 0;
     var e0 = 0;
     var e1 = 0;
     for (var i = 0; i + lag < n; i++) {
-      num += buf[i] * buf[i + lag];
-      e0 += buf[i] * buf[i];
-      e1 += buf[i + lag] * buf[i + lag];
+      var a = num(buf[i], 0);
+      var b = num(buf[i + lag], 0);
+      acc += a * b;
+      e0 += a * a;
+      e1 += b * b;
     }
     var den = Math.sqrt(e0 * e1);
-    return den > 0 ? num / den : 0;
+    return den > 0 ? acc / den : 0;
   }
 
   function encodeWav(samples, sampleRate) {
-    sampleRate = Math.round(sampleRate || DEFAULT_SAMPLE_RATE);
-    var n = samples.length;
+    sampleRate = Math.round(Number(sampleRate));
+    if (!isFinite(sampleRate) || sampleRate < 1) sampleRate = DEFAULT_SAMPLE_RATE;
+    if (sampleRate > 96000) sampleRate = 96000;
+    if (!samples || typeof samples.length !== 'number' || typeof samples === 'string') {
+      samples = [];
+    }
+    var n = Math.max(0, Math.floor(samples.length));
     var bytes = new Uint8Array(44 + n * 2);
     var dv = new DataView(bytes.buffer);
     function put(off, text) {
@@ -275,8 +325,12 @@
     dv.setUint32(28, sampleRate * 2, true); dv.setUint16(32, 2, true);
     dv.setUint16(34, 16, true); put(36, 'data'); dv.setUint32(40, n * 2, true);
     for (var j = 0; j < n; j++) {
-      var s = clamp(samples[j], -1, 1);
-      dv.setInt16(44 + j * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+      var s = Number(samples[j]);
+      if (!isFinite(s)) s = 0;
+      s = s < -1 ? -1 : s > 1 ? 1 : s;
+      /* Round to the nearest int16; truncating here would cost up to one
+         LSB and skew positive and negative half cycles differently. */
+      dv.setInt16(44 + j * 2, Math.round(s < 0 ? s * 0x8000 : s * 0x7fff), true);
     }
     return bytes;
   }
@@ -302,6 +356,9 @@
   function merge(dst, src) {
     for (var k in src) {
       if (!Object.prototype.hasOwnProperty.call(src, k)) continue;
+      /* Keys that can rewrite prototypes or constructors are never merged;
+         a crafted state file must not be able to pollute Object.prototype. */
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
       var v = src[k];
       if (v && typeof v === 'object' && !Array.isArray(v) &&
           dst[k] && typeof dst[k] === 'object' && !Array.isArray(dst[k])) {
@@ -319,22 +376,25 @@
       merge(s, overrides);
     }
     s.version = typeof s.version === 'string' ? s.version : VERSION;
-    s.audioOn = !!s.audioOn;
+    s.audioOn = s.audioOn === true;
 
+    /* Build a dense normalized source list: Array#map would copy holes
+       through from a sparse input array and crash later consumers. */
     var raw = Array.isArray(s.sources) ? s.sources.slice(0, 4) : [];
     while (raw.length < 2) {
       raw.push({ x: 0.5, y: 0.5, amplitude: 1, phase: 0 });
     }
-    s.sources = raw.map(function (p, i) {
-      p = p && typeof p === 'object' ? p : {};
-      var d = DEFAULT_STATE.sources[i % 2];
-      return {
-        x: roundTo(clamp(p.x === undefined ? d.x : p.x, 0, 1)),
-        y: roundTo(clamp(p.y === undefined ? d.y : p.y, 0, 1)),
+    s.sources = [];
+    for (var si = 0; si < raw.length; si++) {
+      var p = raw[si] && typeof raw[si] === 'object' ? raw[si] : {};
+      var ds = DEFAULT_STATE.sources[si % 2];
+      s.sources.push({
+        x: roundTo(clamp(p.x === undefined ? ds.x : p.x, 0, 1)),
+        y: roundTo(clamp(p.y === undefined ? ds.y : p.y, 0, 1)),
         amplitude: roundTo(clamp(p.amplitude === undefined ? 1 : p.amplitude, 0, 2)),
         phase: roundTo(clamp(p.phase === undefined ? 0 : p.phase, -TAU, TAU))
-      };
-    });
+      });
+    }
 
     var op = s.optics && typeof s.optics === 'object' ? s.optics : {};
     s.optics = {
@@ -353,9 +413,19 @@
       modIndex: roundTo(clamp(sy.modIndex === undefined ? 3 : sy.modIndex, 0, 20)),
       sampleRate: Math.round(clamp(sy.sampleRate === undefined ? DEFAULT_SAMPLE_RATE : sy.sampleRate, 8000, 96000)),
       duration: roundTo(clamp(sy.duration === undefined ? 1 : sy.duration, 0.05, 10)),
-      seed: Math.abs(Math.round(Number(sy.seed) || 0)) % 4294967296,
+      seed: (function () {
+        var sd = Math.abs(Math.round(Number(sy.seed) || 0)) % 4294967296;
+        return isFinite(sd) ? sd : 0;
+      })(),
       amplitude: roundTo(clamp(sy.amplitude === undefined ? 0.8 : sy.amplitude, 0, 1))
     };
+    /* When the caller gave a frequency but no note, derive the note readout
+       from the frequency so the two fields cannot contradict each other.
+       This checks the raw overrides, not the merged object. */
+    var rawSy = overrides && overrides.synth && typeof overrides.synth === 'object' ? overrides.synth : {};
+    if (rawSy.midi === undefined && rawSy.frequency !== undefined) {
+      s.synth.midi = Math.round(clamp(frequencyToNote(s.synth.frequency), 0, 127));
+    }
 
     var vw = s.view && typeof s.view === 'object' ? s.view : {};
     s.view = {
@@ -369,24 +439,46 @@
 
   /* Sort every key and round every number so object insertion order and
      float noise can never change the serialized bytes. */
-  function canonicalize(v) {
-    if (Array.isArray(v)) return v.map(canonicalize);
+  function canonicalize(v, depth) {
+    depth = depth || 0;
+    /* Circular structures and pathological nesting bottom out at null
+       instead of overflowing the stack. */
+    if (depth > 64) return null;
+    if (typeof v === 'bigint') {
+      var bn = Number(v);
+      return Number.isSafeInteger(bn) ? bn : String(v);
+    }
+    if (typeof v === 'function' || typeof v === 'symbol' || v === undefined) return null;
+    if (Array.isArray(v)) {
+      return v.map(function (item) { return canonicalize(item, depth + 1); });
+    }
     if (v && typeof v === 'object') {
       var keys = Object.keys(v).sort();
       var out = {};
-      for (var i = 0; i < keys.length; i++) out[keys[i]] = canonicalize(v[keys[i]]);
+      for (var i = 0; i < keys.length; i++) {
+        /* defineProperty so a literal "__proto__" key stays an own property
+           instead of rewriting the prototype of the output object. */
+        Object.defineProperty(out, keys[i], {
+          value: canonicalize(v[keys[i]], depth + 1),
+          writable: true, enumerable: true, configurable: true
+        });
+      }
       return out;
     }
     if (typeof v === 'number') {
       if (!isFinite(v)) return 0;
       var r = Math.round(v * PRECISION) / PRECISION;
+      /* Values past about 1.8e302 overflow the multiply; keep the original
+         finite number rather than collapsing it to null in the JSON. */
+      if (!isFinite(r)) return v;
       return Object.is(r, -0) ? 0 : r;
     }
     return v;
   }
 
   function serializeState(state) {
-    return JSON.stringify(canonicalize(state));
+    var s = JSON.stringify(canonicalize(state));
+    return s === undefined ? 'null' : s;
   }
 
   function deserializeState(text) {

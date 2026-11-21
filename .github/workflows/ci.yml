@@ -15,6 +15,6 @@ jobs:
         with:
           node-version: '20'
       - name: Run unit tests
-        run: node --test test/nanosynth.test.js
+        run: node --test test/
       - name: Verify data URI is reproducible
         run: node tools/generate_data_uri.js && git diff --exit-code DATA_URI.txt

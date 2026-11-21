@@ -10,7 +10,7 @@ const html = fs.readFileSync(path.join(root, 'shrink.html'), 'utf8');
 const uri = N.encodeDataUri(html);
 const bytes = Buffer.byteLength(uri);
 
-if (html.length >= 2950) throw new Error('shrink.html must stay below 2950 bytes');
+if (Buffer.byteLength(html) >= 2950) throw new Error('shrink.html must stay below 2950 bytes');
 if (bytes >= 3072) throw new Error('data uri must stay below 3072 bytes');
 if (N.decodeDataUri(uri) !== html) throw new Error('data uri did not round trip');
 

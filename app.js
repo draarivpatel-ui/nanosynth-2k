@@ -15,6 +15,7 @@
   var animTimer = null;
   var lastBuffer = null;
   var dragIdx = -1;
+  var activeSrc = 1;
   var probe = { x: 0.5, y: 0.5 };
   var shrinkCache = null;
 
@@ -22,15 +23,29 @@
 
   /* ---------- State to controls ---------- */
 
+  /* A select has a fixed option list; a state value outside it would leave
+     the control blank and silently change on the next input. Snap to the
+     numerically nearest option so the visible control is always honest. */
+  function snapSelect(el, v) {
+    el.value = String(v);
+    if (el.selectedIndex >= 0) return;
+    var best = 0, bestD = Infinity;
+    for (var i = 0; i < el.options.length; i++) {
+      var d = Math.abs(Number(el.options[i].value) - Number(v));
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    el.selectedIndex = best;
+  }
+
   function pushControls() {
     $('wl').value = state.optics.wavelength;
     $('sp').value = state.optics.spreading;
     $('ph').value = state.sources[1].phase;
     $('am').value = state.sources[1].amplitude;
-    $('srcCount').value = String(state.sources.length);
-    $('palette').value = state.view.palette;
-    $('step').value = String(state.view.step);
-    $('mode').value = state.synth.mode;
+    snapSelect($('srcCount'), state.sources.length);
+    snapSelect($('palette'), state.view.palette);
+    snapSelect($('step'), state.view.step);
+    snapSelect($('mode'), state.synth.mode);
     $('freq').value = state.synth.frequency;
     $('midi').value = state.synth.midi;
     $('amp').value = state.synth.amplitude;
@@ -39,7 +54,7 @@
     $('ratio').value = state.synth.modRatio;
     $('index').value = state.synth.modIndex;
     $('dur').value = state.synth.duration;
-    $('sr').value = String(state.synth.sampleRate);
+    snapSelect($('sr'), state.synth.sampleRate);
     $('ksRow').style.display = state.synth.mode === 'ks' ? 'flex' : 'none';
     $('fmRow').style.display = state.synth.mode === 'fm' ? 'flex' : 'none';
   }
@@ -154,6 +169,13 @@
       fx.strokeStyle = '#04070f';
       fx.lineWidth = 1.5;
       fx.stroke();
+      if (s === activeSrc) {
+        fx.beginPath();
+        fx.arc(srcs[s].x, srcs[s].y, 9, 0, N.TAU);
+        fx.strokeStyle = '#d5e8ff';
+        fx.lineWidth = 1.5;
+        fx.stroke();
+      }
     }
     $('sField').textContent = maxSeen.toFixed(3) + ' / ' + (count ? sumSeen / count : 0).toFixed(3);
     updateProbe(srcs, wl);
@@ -265,6 +287,7 @@
     var b = $('audioBtn');
     b.textContent = 'Audio: ' + (on ? 'ON' : 'OFF');
     b.className = on ? 'on' : 'off';
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
     if (on) {
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       audioCtx.resume();
@@ -288,9 +311,19 @@
   function applyPreset(name) {
     var p = PRESETS[name];
     if (!p) return;
-    state = N.createState({ sources: p.sources, optics: { wavelength: p.wavelength } });
-    state.audioOn = audioOn;
-    state.synth = N.createState({ synth: state.synth }).synth;
+    /* A preset only owns the source layout and wavelength; the synth voice,
+       view settings, spreading and clock survive the swap. */
+    state = N.createState({
+      audioOn: audioOn,
+      sources: p.sources,
+      optics: {
+        wavelength: p.wavelength,
+        spreading: state.optics.spreading,
+        time: state.optics.time
+      },
+      synth: state.synth,
+      view: state.view
+    });
     pushControls();
     refreshLabels();
     refreshStatePanel();
@@ -354,9 +387,17 @@
       var d = Math.hypot(p.x - s.x * field.width, p.y - s.y * field.height);
       if (d < bestD) { bestD = d; best = i; }
     });
-    dragIdx = bestD < 22 ? best : 1;
-    field.setPointerCapture(e.pointerId);
-    moveSource(e);
+    /* Only a press inside the grab ring starts a drag; pressing empty space
+       moves the probe instead of teleporting source B to the pointer. */
+    dragIdx = bestD < 22 ? best : -1;
+    if (dragIdx >= 0) {
+      activeSrc = dragIdx;
+      field.setPointerCapture(e.pointerId);
+      moveSource(e);
+    } else {
+      probe = { x: p.x / field.width, y: p.y / field.height };
+      drawField();
+    }
   });
   field.addEventListener('pointermove', function (e) {
     probe = { x: pointerPos(e).x / field.width, y: pointerPos(e).y / field.height };
@@ -365,6 +406,28 @@
   });
   field.addEventListener('pointerup', function () { dragIdx = -1; });
   field.addEventListener('pointercancel', function () { dragIdx = -1; });
+  /* Arrow keys nudge the last grabbed source so the field is keyboard
+     operable; Shift takes a bigger step. Brackets switch the source. */
+  field.addEventListener('keydown', function (e) {
+    var ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    if (e.key === '[' || e.key === ']') {
+      activeSrc = (activeSrc + (e.key === ']' ? 1 : state.sources.length - 1)) % state.sources.length;
+      drawField();
+      return;
+    }
+    if (!ARROWS[e.key]) return;
+    e.preventDefault();
+    var s = state.sources[activeSrc] || state.sources[state.sources.length - 1];
+    activeSrc = state.sources.indexOf(s);
+    var px = e.shiftKey ? 10 : 2;
+    s.x = N.roundTo(N.clamp(s.x + ARROWS[e.key][0] * px / field.width, 0, 1));
+    s.y = N.roundTo(N.clamp(s.y + ARROWS[e.key][1] * px / field.height, 0, 1));
+    state = N.createState(state);
+    refreshStatePanel();
+    drawField();
+    $('stateMsg').textContent = 'Source ' + (activeSrc + 1) +
+      ' at ' + s.x.toFixed(2) + ', ' + s.y.toFixed(2);
+  });
 
   function moveSource(e) {
     var p = pointerPos(e);
@@ -382,9 +445,11 @@
       clearInterval(animTimer);
       animTimer = null;
       this.textContent = 'Play motion';
+      this.setAttribute('aria-pressed', 'false');
     } else {
       var self = this;
       self.textContent = 'Stop motion';
+      self.setAttribute('aria-pressed', 'true');
       animTimer = setInterval(function () {
         state.optics.time = N.roundTo(state.optics.time + 0.05, 4);
         drawField();
@@ -400,7 +465,11 @@
   $('playBtn').addEventListener('click', play);
   $('wavBtn').addEventListener('click', downloadWav);
   document.addEventListener('keydown', function (e) {
-    if (e.code === 'Space' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') {
+    /* Space plays only when the press did not land on a control. Without
+       this guard a focused button or select both activates natively and
+       triggers play, and held keys would stack voices. */
+    if (e.code === 'Space' && !e.repeat &&
+        !/^(TEXTAREA|INPUT|SELECT|BUTTON|A)$/.test(e.target.tagName)) {
       e.preventDefault();
       play();
     }
@@ -424,13 +493,18 @@
     copyText(N.serializeState(state), 'State JSON');
   });
   $('copyUri').addEventListener('click', function () {
-    getShrink().then(function (h) { copyText(N.encodeDataUri(h), 'Data URI'); });
+    getShrink().then(function (h) { copyText(N.encodeDataUri(h), 'Data URI'); })
+      .catch(function (e) { $('stateMsg').textContent = 'Could not load shrink.html: ' + e.message; });
   });
   $('loadState').addEventListener('click', function () {
     try {
       state = N.deserializeState($('stateBox').value);
       state.audioOn = audioOn;
       pushControls();
+      /* Values outside a control range are normalized now through the same
+         read path a user input would take, instead of mutating silently
+         later when the first control is touched. */
+      readControls();
       refreshLabels();
       refreshStatePanel();
       drawField();

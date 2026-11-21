@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
 <link rel="icon" href="data:,">
 <title>NanoSynth-2K - Wave Optics and Physical Synthesis Workbench</title>
 <style>
@@ -43,6 +44,11 @@
   button.primary{background:#144b47;border-color:#1c6f68;color:#bff7ee}
   button.primary:hover{background:#1a615b}
   button.warn{background:#4a2030;border-color:#7a3348;color:#ffc9d3}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  a.btn-link{display:inline-block;font:inherit;background:#182a49;color:var(--ink);
+    border:1px solid var(--line);border-radius:4px;padding:5px 10px;text-decoration:none;cursor:pointer}
+  a.btn-link:hover{background:#22385f;border-color:#3a5b8c}
+  .pill{font:inherit;background:#182a49;color:var(--ink);border:1px solid var(--line)}
   #audioBtn{font-weight:700;min-width:118px}
   #audioBtn.off{background:#4a2030;border-color:#7a3348;color:#ffc9d3}
   #audioBtn.on{background:#144b2b;border-color:#1c6f3f;color:#c2f7cf}
@@ -64,8 +70,6 @@
 <body>
 <header>
   <h1>Nano<span>Synth</span>-2K</h1>
-  <p>A 2D wave interference optics bench and a Karplus-Strong / FM synthesizer that share one
-     deterministic state. All math is local, zero dependencies, and audio stays muted until you ask for it.</p>
   <span class="tag" id="verTag">v1.0.0</span>
 </header>
 
@@ -73,9 +77,11 @@
   <section>
     <div class="card">
       <h2>Interference field</h2>
-      <canvas id="field" width="400" height="240"></canvas>
+      <canvas id="field" width="400" height="240" tabindex="0" role="img"
+        aria-label="Two dimensional wave interference field. Drag a glowing dot to move a source, or focus the canvas and use the arrow keys."></canvas>
       <div class="legend">Drag a glowing dot to move a source. Bright ridges are constructive
-        interference; dark bands are destructive. Amplitude falls as one over the square root of distance.</div>
+        interference; dark bands are destructive. Amplitude falls as one over the square root of distance.
+        Keyboard: focus the field, [ and ] pick a source, arrow keys move it, Shift steps faster.</div>
       <div class="row" style="margin-top:12px">
         <label>Wavelength <span><b id="wlVal">26</b> px</span>
           <input id="wl" type="range" min="6" max="120" step="1" value="26"></label>
@@ -96,13 +102,13 @@
         <label>Field resolution
           <select id="step"><option value="1">Full</option><option value="2" selected>Half</option><option value="3">Third</option></select></label>
         <label>Animate
-          <button id="animBtn" style="width:100%">Play motion</button></label>
+          <button id="animBtn" aria-pressed="false" style="width:100%">Play motion</button></label>
       </div>
       <div class="row">
-        <span class="pill" data-preset="young">Young double slit</span>
-        <span class="pill" data-preset="antiphase">Antiphase pair</span>
-        <span class="pill" data-preset="quad">Quad array</span>
-        <span class="pill" data-preset="grating">Three slit</span>
+        <button type="button" class="pill" data-preset="young">Young double slit</button>
+        <button type="button" class="pill" data-preset="antiphase">Antiphase pair</button>
+        <button type="button" class="pill" data-preset="quad">Quad array</button>
+        <button type="button" class="pill" data-preset="grating">Three slit</button>
       </div>
       <div style="margin-top:10px">
         <div class="stat"><span>Pointer intensity</span><span id="sInt">0.000</span></div>
@@ -123,10 +129,10 @@
         <button id="loadState">Load from text box</button>
         <button id="resetState" class="warn">Reset</button>
       </div>
-      <textarea id="stateBox" spellcheck="false"></textarea>
+      <textarea id="stateBox" spellcheck="false" aria-label="Serialized deterministic state JSON"></textarea>
       <div class="stat" style="margin-top:8px"><span>State hash (FNV-1a)</span><span id="sHash">-</span></div>
       <div class="stat"><span>Serialized bytes</span><span id="sBytes">0</span></div>
-      <div class="note" id="stateMsg" style="margin-top:6px">Ready.</div>
+      <div class="note" id="stateMsg" style="margin-top:6px" aria-live="polite">Ready.</div>
     </div>
   </section>
 
@@ -134,7 +140,7 @@
     <div class="card">
       <h2>Audio (muted until you click)</h2>
       <div class="row">
-        <button id="audioBtn" class="off">Audio: OFF</button>
+        <button id="audioBtn" class="off" aria-pressed="false">Audio: OFF</button>
         <button id="playBtn" class="primary">Pluck / Play</button>
         <button id="wavBtn">Download WAV</button>
       </div>
@@ -171,7 +177,8 @@
         <label>Sample rate
           <select id="sr"><option value="22050">22050</option><option value="44100" selected>44100</option><option value="48000">48000</option></select></label>
       </div>
-      <canvas id="wave" class="wave" width="600" height="128"></canvas>
+      <canvas id="wave" class="wave" width="600" height="128" role="img"
+        aria-label="Preview of the synthesized waveform"></canvas>
       <div class="stat" style="margin-top:8px"><span>Peak / RMS</span><span id="sLevel">0 / 0</span></div>
       <div class="stat"><span>Detected period lag</span><span id="sLag">-</span></div>
       <div class="stat"><span>Estimated pitch</span><span id="sPitch">-</span></div>
@@ -183,7 +190,7 @@
         2,950 bytes. <code>DATA_URI.txt</code> holds the copyable
         <code>data:text/html,...</code> version under 3,072 bytes. Both keep audio off on load.</div>
       <div class="row" style="margin-top:8px">
-        <a href="shrink.html" target="_blank" rel="noopener"><button>Open shrink.html</button></a>
+        <a href="shrink.html" target="_blank" rel="noopener" class="btn-link">Open shrink.html</a>
         <button id="verifyBtn">Verify byte budgets</button>
       </div>
       <div class="stat"><span>shrink.html bytes</span><span id="vHtml">-</span></div>

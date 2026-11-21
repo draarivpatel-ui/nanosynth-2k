@@ -48,9 +48,9 @@ node tools/generate_data_uri.js
 | `index.html` | Full modular workbench markup and styles |
 | `app.js` | Workbench controller, rendering, audio, and state UI |
 | `src/nanosynth.js` | Shared math core, usable in Node and the browser |
-| `test/nanosynth.test.js` | 60+ `node --test` unit tests |
+| `test/` | 160+ `node --test` unit tests, including hostile-input hardening coverage |
 | `shrink.html` | Standalone sandbox, under 2,950 bytes |
-| `DATA_URI.txt` | Copyable `data:text/html,...` artifact, under 3,072 bytes |
+| `DATA_URI.txt` | Copyable `data:text/html,...` URI on its last line, under 3,072 bytes |
 | `tools/generate_data_uri.js` | Regenerates `DATA_URI.txt` deterministically |
 
 ## The two halves

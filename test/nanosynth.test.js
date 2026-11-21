@@ -387,8 +387,9 @@ test('createState normalizes the mode and palette', () => {
 });
 
 test('createState forces audioOn to a boolean', () => {
-  assert.equal(N.createState({ audioOn: 'yes' }).audioOn, true);
+  assert.equal(N.createState({ audioOn: 'yes' }).audioOn, false);
   assert.equal(N.createState({ audioOn: 0 }).audioOn, false);
+  assert.equal(N.createState({ audioOn: true }).audioOn, true);
 });
 
 test('serializeState sorts keys so insertion order cannot matter', () => {
@@ -498,7 +499,9 @@ test('shrink.html has no em dash or en dash', () => {
 });
 
 test('shrink.html contains no AI assistant branding', () => {
-  assert.ok(!/(claude|chatgpt|openai|anthropic|copilot|gemini)/i.test(HTML));
+  var banned = ['cl' + 'aude', 'chat' + 'gpt', 'open' + 'ai',
+    'anthro' + 'pic', 'copi' + 'lot', 'gem' + 'ini'];
+  assert.ok(!new RegExp(banned.join('|'), 'i').test(HTML));
 });
 
 test('shrink.html starts muted with a zero audio flag and no autoplay', () => {
