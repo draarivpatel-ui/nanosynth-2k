@@ -25,6 +25,7 @@
   main{display:grid;grid-template-columns:minmax(340px,1.2fr) minmax(300px,.9fr);
     gap:16px;padding:16px;align-items:start}
   @media(max-width:880px){main{grid-template-columns:1fr}}
+  main>section{min-width:0}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;
     padding:14px;margin-bottom:16px}
   .card h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);
@@ -63,6 +64,27 @@
   .kbd{background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:0 4px}
   .wave{display:block;width:100%;height:64px;background:var(--panel2);
     border:1px solid var(--line);border-radius:4px;margin-top:8px}
+  main .wide{grid-column:1/-1}
+  .labScroll{overflow-x:auto;margin-top:10px}
+  table.lab{width:100%;border-collapse:collapse;font-size:11px}
+  table.lab th,table.lab td{border-bottom:1px solid var(--line);padding:4px 6px;
+    text-align:right;white-space:nowrap}
+  table.lab th:first-child,table.lab td:first-child{text-align:left}
+  table.lab th{color:var(--dim);font-weight:400}
+  table.lab tbody tr{cursor:pointer}
+  table.lab tbody tr:hover{background:#16294a}
+  table.lab tr.sel{background:#1a3358}
+  table.lab td button{font-size:10px;padding:2px 8px}
+  svg.chart{display:block;width:100%;height:auto;background:var(--panel2);
+    border:1px solid var(--line);border-radius:4px;margin-top:10px}
+  svg.chart .axis{stroke:var(--line);stroke-width:1}
+  svg.chart .probe{stroke:#04070f;stroke-width:1}
+  svg.chart .probe:focus{outline:none;stroke:#d5e8ff;stroke-width:2}
+  svg.chart text{fill:var(--dim);font-size:9px;font-family:inherit}
+  #labTests{font-size:11px;color:var(--dim);max-height:170px;overflow:auto;
+    margin:8px 0 0;padding-left:22px}
+  #labTests li.ok{color:var(--accent)}
+  #labTests li.bad{color:var(--warn)}
   footer{padding:14px 20px;border-top:1px solid var(--line);color:var(--dim);font-size:11px}
   code{color:var(--accent2)}
 </style>
@@ -199,6 +221,59 @@
       <div class="note" id="verifyMsg" style="margin-top:6px">Not checked yet.</div>
     </div>
   </section>
+
+  <section class="wide">
+    <div class="card" id="labCard">
+      <h2>Optics and spectrum analysis lab</h2>
+      <div class="note">Each row drives the shared core directly: exact phasor far-field
+        intensity, autocorrelation pitch, a radix-2 FFT spectrum and the WAV byte count.
+        Click a row to draw its profile and spectrum; Apply sends it to the bench.</div>
+      <div class="labScroll">
+      <table class="lab" aria-label="Optics preset and synthesis voice comparator">
+        <thead>
+          <tr>
+            <th>Preset</th><th>Voice</th><th>Spacing</th><th>Measured</th>
+            <th>Visibility</th><th>Pitch err</th><th>Centroid</th><th>Top peak</th>
+            <th>WAV</th><th>RMS</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="labRows"></tbody>
+      </table>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label>Profile preset
+          <select id="labPreset">
+            <option value="double-slit">Double slit</option>
+            <option value="antiphase">Antiphase pair</option>
+            <option value="quad-array">Quad array</option>
+            <option value="three-slit">Three slit</option>
+          </select></label>
+        <label>Profile span <span><b id="labSpanVal">300</b> px</span>
+          <input id="labSpan" type="range" min="100" max="600" step="10" value="300"></label>
+        <button id="labRefresh">Recompute lab</button>
+      </div>
+      <svg id="labProfile" class="chart" viewBox="0 0 640 200" role="img"
+        aria-label="Far-field intensity profile with fringe markers"></svg>
+      <div class="note" id="labProfileRead">-</div>
+      <svg id="labSpectrum" class="chart" viewBox="0 0 640 200" role="img"
+        aria-label="Log magnitude harmonic spectrum comparing Karplus-Strong and FM in decibels"></svg>
+      <div class="note" id="labSpecRead">-</div>
+      <div class="row" style="margin-top:10px">
+        <button id="labJson">Export JSON</button>
+        <button id="labCsv">Export CSV</button>
+        <button id="labMd">Export Markdown</button>
+        <button id="labShare">Copy share link</button>
+        <button id="labVerify">Verify digest</button>
+        <button id="labTamper" class="warn">Tamper demo</button>
+      </div>
+      <div class="stat"><span>Brief SHA-256</span><span id="labDigest">-</span></div>
+      <div class="note" id="labMsg" aria-live="polite">Ready.</div>
+      <div class="row">
+        <button id="labSelfTest" class="primary">Run lab self-tests</button>
+      </div>
+      <ol id="labTests"></ol>
+    </div>
+  </section>
 </main>
 
 <footer>
@@ -208,6 +283,7 @@
 </footer>
 
 <script src="src/nanosynth.js"></script>
+<script src="src/optics-dsp-lab.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

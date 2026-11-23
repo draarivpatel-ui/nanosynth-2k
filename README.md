@@ -48,7 +48,8 @@ node tools/generate_data_uri.js
 | `index.html` | Full modular workbench markup and styles |
 | `app.js` | Workbench controller, rendering, audio, and state UI |
 | `src/nanosynth.js` | Shared math core, usable in Node and the browser |
-| `test/` | 160+ `node --test` unit tests, including hostile-input hardening coverage |
+| `src/optics-dsp-lab.js` | Optics fringe and harmonic spectrum lab: far-field profiles, radix-2 FFT, pitch tracking, SHA-256 audited exports, and the `#ns=` share codec |
+| `test/` | 390+ `node --test` unit tests, including hostile-input hardening coverage |
 | `shrink.html` | Standalone sandbox, under 2,950 bytes |
 | `DATA_URI.txt` | Copyable `data:text/html,...` URI on its last line, under 3,072 bytes |
 | `tools/generate_data_uri.js` | Regenerates `DATA_URI.txt` deterministically |
@@ -82,6 +83,25 @@ and floating point noise cannot change the bytes. `stateHash` is an FNV-1a of
 those canonical bytes. `cloneState` and `deserializeState` round trip cleanly.
 The workbench text box accepts canonical JSON and the state panel shows the
 hash and byte count.
+
+## Optics and spectrum analysis lab
+
+`src/optics-dsp-lab.js` adds a deterministic measurement lab on top of the
+shared core. A four preset by two voice comparator computes the exact
+phasor far-field intensity profile, the fringe visibility, the Young
+spacing prediction and measurement, an autocorrelation pitch estimate,
+a radix-2 FFT log-magnitude spectrum with centroid and top peaks, and
+the 16 bit WAV byte count. The page draws the profile and both spectra
+as inline SVG with keyboard focusable probes.
+
+Every export is stamped with one pure-JS FIPS 180-4 SHA-256 digest cached
+per canonical state key, so the on-page fingerprint, the JSON export, the
+CSV provenance line and the Markdown footer always agree, and the page
+can verify or demonstrate tampering on demand. A strict `#ns=` bookmark
+codec round trips preset, voice, frequency, damping or FM index, and
+wavelength in a base64url hash; it is fail-closed on hostile input and
+never touches audio state. The card runs a self-test suite in-page and
+hides itself cleanly when the module file is absent.
 
 ## Byte budget
 

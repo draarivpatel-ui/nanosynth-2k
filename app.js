@@ -553,11 +553,431 @@
     });
   });
 
+  /* ---------- Optics and spectrum lab ---------- */
+
+  /* The lab module is optional: if src/optics-dsp-lab.js is absent the
+     card is hidden and the rest of the bench is untouched. */
+  var LAB = window.NanoSynthLab || null;
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  var LAB_TO_BENCH = { 'double-slit': 'young', 'antiphase': 'antiphase',
+    'quad-array': 'quad', 'three-slit': 'grating' };
+  var labBriefData = null;
+  var labProfiles = {};
+  var labSel = { preset: 'double-slit', voice: 'karplus-strong' };
+
+  function labOpts() {
+    /* Both voices are measured under one fixed setup so the comparator
+       numbers are comparable; the bench tone controls carry through. */
+    return {
+      frequency: state.synth.frequency,
+      sampleRate: 22050,
+      duration: 0.4,
+      damping: state.synth.damping,
+      modRatio: state.synth.modRatio,
+      modIndex: state.synth.modIndex,
+      seed: state.synth.seed,
+      amplitude: state.synth.amplitude
+    };
+  }
+
+  function labData() {
+    if (!labBriefData) {
+      var o = labOpts();
+      labBriefData = { comparator: LAB.compareAll(o), params: o };
+    }
+    return labBriefData;
+  }
+
+  function labInvalidate() {
+    labBriefData = null;
+    labProfiles = {};
+  }
+
+  function labTd(tr, text) {
+    var c = document.createElement('td');
+    c.textContent = text;
+    tr.appendChild(c);
+    return c;
+  }
+
+  function labSyncSelects() {
+    $('labPreset').value = labSel.preset;
+  }
+
+  function labRenderTable() {
+    var body = $('labRows');
+    body.textContent = '';
+    labData().comparator.forEach(function (r) {
+      if (!r) return;
+      var tr = document.createElement('tr');
+      if (r.preset === labSel.preset && r.voice === labSel.voice) tr.className = 'sel';
+      labTd(tr, r.preset);
+      labTd(tr, r.audio.label);
+      labTd(tr, r.optics.theoreticalSpacing.toFixed(2));
+      labTd(tr, r.optics.measuredSpacing ? r.optics.measuredSpacing.toFixed(2) : '-');
+      labTd(tr, r.optics.visibility.toFixed(4));
+      var cents = r.audio.pitch.errorCents;
+      labTd(tr, (cents >= 0 ? '+' : '') + cents.toFixed(1) + ' c');
+      labTd(tr, r.audio.spectrum.centroidHz.toFixed(0));
+      labTd(tr, r.audio.spectrum.peaks.length ?
+        r.audio.spectrum.peaks[0].db.toFixed(1) + ' dB' : '-');
+      labTd(tr, String(r.audio.wav.bytes));
+      labTd(tr, r.audio.rms.toFixed(3));
+      var cell = labTd(tr, '');
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = 'Apply';
+      b.setAttribute('aria-label', 'Apply ' + r.preset + ' with ' + r.audio.label + ' to the bench');
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        labApplyToBench(r.preset, r.voice);
+      });
+      cell.appendChild(b);
+      tr.addEventListener('click', function () {
+        labSel = { preset: r.preset, voice: r.voice };
+        labSyncSelects();
+        labRenderTable();
+        labRenderProfile();
+        labRenderSpectrum();
+      });
+      body.appendChild(tr);
+    });
+  }
+
+  function labApplyToBench(preset, voice) {
+    var bench = LAB_TO_BENCH[preset];
+    if (bench) applyPreset(bench);
+    var sy = Object.assign({}, state.synth);
+    sy.mode = LAB.voiceToApp(voice);
+    state = N.createState({
+      audioOn: audioOn, sources: state.sources, optics: state.optics,
+      synth: sy, view: state.view
+    });
+    labSel = { preset: preset, voice: voice };
+    labSyncSelects();
+    pushControls();
+    refreshLabels();
+    refreshStatePanel();
+    drawField();
+    preview();
+    labRenderAll();
+    $('stateMsg').textContent = 'Lab preset applied to bench: ' + preset + ' / ' + LAB.VOICE_LABELS[voice];
+  }
+
+  function svgEl(tag, attrs) {
+    var e = document.createElementNS(SVGNS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  /* Wires left and right arrow keys across a row of focusable probes. */
+  function labProbeNav(list) {
+    list.forEach(function (c, i) {
+      c.addEventListener('keydown', function (e) {
+        var j = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : -1;
+        if (j >= 0 && j < list.length) { e.preventDefault(); list[j].focus(); }
+      });
+    });
+  }
+
+  function labGetProfile(preset) {
+    if (!labProfiles[preset]) {
+      labProfiles[preset] = LAB.farFieldProfile(preset, {
+        points: 401,
+        span: Number($('labSpan').value) || 300,
+        spreading: state.optics.spreading
+      });
+    }
+    return labProfiles[preset];
+  }
+
+  function labRenderProfile() {
+    var svg = $('labProfile');
+    svg.textContent = '';
+    var f = labGetProfile(labSel.preset);
+    if (!f) { $('labProfileRead').textContent = 'Profile unavailable.'; return; }
+    var x0 = 30, x1 = 634, y0 = 10, y1 = 182;
+    svg.appendChild(svgEl('line', { x1: x0, y1: y0, x2: x0, y2: y1, 'class': 'axis' }));
+    svg.appendChild(svgEl('line', { x1: x0, y1: y1, x2: x1, y2: y1, 'class': 'axis' }));
+    var maxY = f.max > 0 ? f.max : 1;
+    var pts = '';
+    for (var i = 0; i < f.points; i++) {
+      var px = x0 + (x1 - x0) * (f.xs[i] + f.span) / (2 * f.span);
+      var py = y1 - (y1 - y0) * f.profile[i] / maxY;
+      pts += px.toFixed(1) + ',' + py.toFixed(1) + ' ';
+    }
+    svg.appendChild(svgEl('polyline', { points: pts, fill: 'none',
+      stroke: '#4fd6c9', 'stroke-width': 1.4 }));
+    var t = svgEl('text', { x: x0 + 4, y: y0 + 12 });
+    t.textContent = 'I(x) ' + f.label + ', span +/-' + f.span + ' px';
+    svg.appendChild(t);
+    var probes = [];
+    function probeAt(m, kind) {
+      var px = x0 + (x1 - x0) * (m.x + f.span) / (2 * f.span);
+      var py = y1 - (y1 - y0) * m.intensity / maxY;
+      var c = svgEl('circle', { cx: px.toFixed(1), cy: py.toFixed(1),
+        r: kind === 'max' ? 3 : 2.4, 'class': 'probe',
+        fill: kind === 'max' ? '#4fd6c9' : '#e0556b', tabindex: '0' });
+      c.setAttribute('role', 'img');
+      c.setAttribute('aria-label', (kind === 'max' ? 'Constructive' : 'Destructive') +
+        ' fringe at ' + m.x.toFixed(1) + ' px, intensity ' + m.intensity.toFixed(3));
+      c.addEventListener('focus', function () {
+        $('labProfileRead').textContent = (kind === 'max' ? 'Constructive' : 'Destructive') +
+          ' fringe at ' + m.x.toFixed(1) + ' px, I=' + m.intensity.toFixed(4);
+      });
+      c.addEventListener('pointerenter', function () {
+        $('labProfileRead').textContent = (kind === 'max' ? 'Constructive' : 'Destructive') +
+          ' fringe at ' + m.x.toFixed(1) + ' px, I=' + m.intensity.toFixed(4);
+      });
+      probes.push(c);
+      svg.appendChild(c);
+    }
+    f.maxima.forEach(function (m) { probeAt(m, 'max'); });
+    f.minima.forEach(function (m) { probeAt(m, 'min'); });
+    labProbeNav(probes);
+    $('labProfileRead').textContent = 'Young spacing ' + f.theoreticalSpacing.toFixed(2) +
+      ' px, measured ' + (f.measuredSpacing ? f.measuredSpacing.toFixed(2) : 'n/a') +
+      ' px, visibility ' + f.visibility.toFixed(4) +
+      ', ' + f.maxima.length + ' maxima, ' + f.minima.length + ' minima';
+  }
+
+  function labRenderSpectrum() {
+    var svg = $('labSpectrum');
+    svg.textContent = '';
+    var o = labOpts();
+    var colors = { 'karplus-strong': '#4fd6c9', 'fm-2op': '#ffb347' };
+    var fmax = Math.min(o.sampleRate / 2, Math.max(3000, 4 * o.frequency));
+    var x0 = 30, x1 = 634, y0 = 10, y1 = 182;
+    var floorDb = -84;
+    svg.appendChild(svgEl('line', { x1: x0, y1: y0, x2: x0, y2: y1, 'class': 'axis' }));
+    svg.appendChild(svgEl('line', { x1: x0, y1: y1, x2: x1, y2: y1, 'class': 'axis' }));
+    var t0 = svgEl('text', { x: x0 + 4, y: y0 + 10 });
+    t0.textContent = 'dB';
+    svg.appendChild(t0);
+    var t1 = svgEl('text', { x: x1 - 66, y: y1 - 4 });
+    t1.textContent = fmax.toFixed(0) + ' Hz';
+    svg.appendChild(t1);
+    LAB.VOICE_NAMES.forEach(function (v) {
+      var made = LAB.voiceBuffer(v, o);
+      var spec = LAB.magnitudeDb(made.buf, { sampleRate: o.sampleRate, fftSize: 16384 });
+      var cols = x1 - x0;
+      var pts = '';
+      for (var c = 0; c <= cols; c++) {
+        var h0 = fmax * c / cols, h1 = fmax * (c + 1) / cols;
+        var b0 = Math.floor(h0 / spec.binHz);
+        var b1 = Math.min(spec.magsDb.length - 1, Math.ceil(h1 / spec.binHz));
+        var m = floorDb;
+        for (var b = b0; b <= b1; b++) if (spec.magsDb[b] > m) m = spec.magsDb[b];
+        pts += (x0 + c).toFixed(1) + ',' + (y1 - (y1 - y0) * (m - floorDb) / -floorDb).toFixed(1) + ' ';
+      }
+      svg.appendChild(svgEl('polyline', { points: pts, fill: 'none',
+        stroke: colors[v], 'stroke-width': 1.2 }));
+      var lg = svgEl('text', { x: x1 - 150 + LAB.VOICE_NAMES.indexOf(v) * 78, y: y0 + 10 });
+      lg.setAttribute('fill', colors[v]);
+      lg.textContent = LAB.VOICE_LABELS[v];
+      svg.appendChild(lg);
+    });
+    var row = null;
+    labData().comparator.forEach(function (r) {
+      if (r && r.preset === labSel.preset && r.voice === labSel.voice) row = r;
+    });
+    var probes = [];
+    if (row) {
+      row.audio.spectrum.peaks.forEach(function (pk, i) {
+        if (pk.freqHz > fmax) return;
+        var px = x0 + (x1 - x0) * pk.freqHz / fmax;
+        var py = y1 - (y1 - y0) * (Math.max(floorDb, pk.db) - floorDb) / -floorDb;
+        var c = svgEl('circle', { cx: px.toFixed(1), cy: py.toFixed(1), r: 3,
+          'class': 'probe', fill: colors[labSel.voice], tabindex: '0' });
+        c.setAttribute('role', 'img');
+        c.setAttribute('aria-label', 'Harmonic peak ' + (i + 1) + ' at ' +
+          pk.freqHz.toFixed(1) + ' Hz, ' + pk.db.toFixed(1) + ' dB');
+        c.addEventListener('focus', function () {
+          $('labSpecRead').textContent = 'Peak ' + (i + 1) + ': ' + pk.freqHz.toFixed(1) +
+            ' Hz at ' + pk.db.toFixed(1) + ' dB (' + row.audio.label + ')';
+        });
+        c.addEventListener('pointerenter', function () {
+          $('labSpecRead').textContent = 'Peak ' + (i + 1) + ': ' + pk.freqHz.toFixed(1) +
+            ' Hz at ' + pk.db.toFixed(1) + ' dB (' + row.audio.label + ')';
+        });
+        probes.push(c);
+        svg.appendChild(c);
+      });
+    }
+    labProbeNav(probes);
+    var ksRow = labData().comparator[0], fmRow = labData().comparator[1];
+    $('labSpecRead').textContent = 'Centroid ' +
+      (ksRow ? ksRow.audio.spectrum.centroidHz.toFixed(0) : '-') + ' Hz KS / ' +
+      (fmRow ? fmRow.audio.spectrum.centroidHz.toFixed(0) : '-') +
+      ' Hz FM at ' + o.frequency.toFixed(1) + ' Hz target';
+  }
+
+  function labRenderDigest() {
+    var d = LAB.briefDigest(labData());
+    var el = $('labDigest');
+    el.textContent = d.slice(0, 24) + '...';
+    el.setAttribute('title', d);
+  }
+
+  function labRenderAll() {
+    labRenderTable();
+    labRenderProfile();
+    labRenderSpectrum();
+    labRenderDigest();
+  }
+
+  function labDownload(text, name, type) {
+    var blob = new Blob([text], { type: type });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  }
+
+  /* Restores a #ns= bookmark into bench state. The codec is fail-closed:
+     a malformed or hostile hash returns null and nothing changes. Audio
+     stays off regardless of what the bookmark carries. */
+  function restoreFromHash() {
+    if (!LAB || typeof location === 'undefined' || !location.hash) return;
+    var bm = LAB.decodeBookmark(location.hash);
+    if (!bm) return;
+    var next = {
+      audioOn: false,
+      sources: state.sources,
+      optics: state.optics,
+      synth: state.synth,
+      view: state.view
+    };
+    if (bm.p && LAB_TO_BENCH[bm.p] && PRESETS[LAB_TO_BENCH[bm.p]]) {
+      var bp = PRESETS[LAB_TO_BENCH[bm.p]];
+      next.sources = bp.sources;
+      next.optics = Object.assign({}, state.optics, { wavelength: bp.wavelength });
+    }
+    var sy = Object.assign({}, next.synth);
+    if (bm.m) sy.mode = bm.m;
+    if (bm.f !== undefined) {
+      sy.frequency = bm.f;
+      delete sy.midi; /* let createState derive the note from the frequency */
+    }
+    if (bm.d !== undefined) sy.damping = bm.d;
+    if (bm.i !== undefined) sy.modIndex = bm.i;
+    next.synth = sy;
+    if (bm.w !== undefined) {
+      next.optics = Object.assign({}, next.optics, { wavelength: bm.w });
+    }
+    state = N.createState(next);
+    state.audioOn = false;
+    if (bm.p) labSel.preset = bm.p;
+    if (bm.m) labSel.voice = LAB.voiceFromApp(bm.m);
+    labInvalidate();
+  }
+
+  function initLab() {
+    labSyncSelects();
+    labRenderAll();
+    $('labRefresh').addEventListener('click', function () {
+      labInvalidate();
+      labRenderAll();
+      $('labMsg').textContent = 'Comparator recomputed from the current bench controls.';
+    });
+    $('labPreset').addEventListener('change', function () {
+      labSel.preset = $('labPreset').value;
+      labRenderTable();
+      labRenderProfile();
+    });
+    $('labSpan').addEventListener('input', function () {
+      $('labSpanVal').textContent = $('labSpan').value;
+    });
+    $('labSpan').addEventListener('change', function () {
+      labProfiles = {};
+      labRenderProfile();
+    });
+    $('labJson').addEventListener('click', function () {
+      labDownload(LAB.exportJson(labData()), 'nanosynth-lab-brief.json', 'application/json');
+      $('labMsg').textContent = 'JSON brief downloaded with digest ' +
+        LAB.briefDigest(labData()).slice(0, 16) + '.';
+    });
+    $('labCsv').addEventListener('click', function () {
+      labDownload(LAB.exportCsv(labData()), 'nanosynth-lab-brief.csv', 'text/csv');
+      $('labMsg').textContent = 'CSV brief downloaded; provenance line carries the same digest.';
+    });
+    $('labMd').addEventListener('click', function () {
+      labDownload(LAB.exportMarkdown(labData()), 'nanosynth-lab-brief.md', 'text/markdown');
+      $('labMsg').textContent = 'Markdown brief downloaded; footer carries the same digest.';
+    });
+    $('labShare').addEventListener('click', function () {
+      var code = LAB.encodeBookmark({
+        p: LAB.detectPresetName(state.sources) || labSel.preset,
+        m: state.synth.mode,
+        f: state.synth.frequency,
+        w: state.optics.wavelength,
+        d: state.synth.damping,
+        i: state.synth.modIndex
+      });
+      if (!code) { $('labMsg').textContent = 'Could not build a share link.'; return; }
+      if (history.replaceState) history.replaceState(null, '', code);
+      copyText(location.href.split('#')[0] + code, 'Share link');
+    });
+    $('labVerify').addEventListener('click', function () {
+      var v = LAB.verifyBrief(LAB.exportJson(labData()));
+      $('labMsg').textContent = v.ok ?
+        'Digest verified: the brief payload hashes to the stamped value.' :
+        'Verification failed (' + v.reason + ').';
+      $('labMsg').style.color = v.ok ? 'var(--accent)' : 'var(--warn)';
+    });
+    $('labTamper').addEventListener('click', function () {
+      var bad = LAB.tamperJson(LAB.exportJson(labData()));
+      var v = LAB.verifyBrief(bad);
+      $('labMsg').textContent = v.ok ?
+        'Tamper check inconclusive: payload still verified.' :
+        'Tamper detected: one flipped metric changed the digest (' + v.reason + ').';
+      $('labMsg').style.color = v.ok ? 'var(--warn)' : 'var(--accent)';
+    });
+    $('labSelfTest').addEventListener('click', function () {
+      var results = LAB.selfTests();
+      var ol = $('labTests');
+      ol.textContent = '';
+      var pass = 0;
+      results.forEach(function (r) {
+        var li = document.createElement('li');
+        li.className = r.pass ? 'ok' : 'bad';
+        li.textContent = (r.pass ? 'pass' : 'FAIL') + '  ' + r.name +
+          (r.detail ? '  (' + r.detail + ')' : '');
+        ol.appendChild(li);
+        if (r.pass) pass++;
+      });
+      $('labMsg').textContent = 'Lab self-tests: ' + pass + '/' + results.length + ' passed.';
+      $('labMsg').style.color = pass === results.length ? 'var(--accent)' : 'var(--warn)';
+    });
+    ['wl', 'sp', 'freq', 'damp', 'seed', 'ratio', 'index', 'amp', 'dur', 'sr',
+     'mode', 'midi', 'ph', 'am', 'srcCount'].forEach(function (id) {
+      $(id).addEventListener('change', function () {
+        labInvalidate();
+        labRenderAll();
+      });
+    });
+    window.addEventListener('hashchange', function () {
+      restoreFromHash();
+      pushControls();
+      refreshLabels();
+      refreshStatePanel();
+      drawField();
+      preview();
+      labRenderAll();
+    });
+  }
+
   /* ---------- Boot ---------- */
 
+  restoreFromHash();
   pushControls();
   refreshLabels();
   refreshStatePanel();
   drawField();
   preview();
+  if (LAB) initLab();
+  else if ($('labCard')) $('labCard').style.display = 'none';
 })();
