@@ -19,7 +19,13 @@
   var probe = { x: 0.5, y: 0.5 };
   var shrinkCache = null;
 
+  function motionReduced() {
+    return !!(window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+
   document.getElementById('verTag').textContent = 'v' + N.VERSION;
+  if (motionReduced()) $('animBtn').textContent = 'Step motion';
 
   /* ---------- State to controls ---------- */
 
@@ -190,7 +196,9 @@
     $('sPath').textContent = pdv.toFixed(2) + ' px';
     $('sVerdict').textContent = N.isConstructive(pdv, wl, 0.08) ? 'constructive' :
       N.isDestructive(pdv, wl, 0.08) ? 'destructive' : 'partial';
-    var sep = Math.abs(srcs[1].x - srcs[0].x) || 1;
+    var sep = srcs.length > 1 ?
+      Math.hypot(srcs[1].x - srcs[0].x, srcs[1].y - srcs[0].y) : 0;
+    if (!(sep > 0)) sep = 1;
     $('sFringe').textContent = N.fringeSpacing(wl, sep, 400).toFixed(2) + ' px';
   }
 
@@ -342,7 +350,7 @@
     preview();
   }
 
-  ['wl', 'sp', 'ph', 'am', 'srcCount', 'palette', 'step', 'mode', 'freq', 'midi',
+  ['wl', 'sp', 'ph', 'am', 'srcCount', 'palette', 'step', 'mode',
    'amp', 'damp', 'seed', 'ratio', 'index', 'dur', 'sr'].forEach(function (id) {
     $(id).addEventListener('input', onControlsChanged);
     $(id).addEventListener('change', onControlsChanged);
@@ -351,10 +359,12 @@
   /* Keep note and frequency ranges loosely coupled without fighting the user. */
   $('midi').addEventListener('input', function () {
     $('freq').value = N.noteToFrequency(+$('midi').value).toFixed(1);
+    onControlsChanged();
   });
   $('freq').addEventListener('input', function () {
     var n = Math.round(N.frequencyToNote(+$('freq').value));
     $('midi').value = Math.max(24, Math.min(96, n));
+    onControlsChanged();
   });
 
   $('srcCount').addEventListener('change', function () {
@@ -441,6 +451,15 @@
   }
 
   $('animBtn').addEventListener('click', function () {
+    if (motionReduced()) {
+      state.optics.time = N.roundTo(state.optics.time + 0.05, 4);
+      drawField();
+      refreshStatePanel();
+      this.textContent = 'Step motion';
+      this.setAttribute('aria-pressed', 'false');
+      $('stateMsg').textContent = 'Reduced motion: advanced one frame.';
+      return;
+    }
     if (animTimer) {
       clearInterval(animTimer);
       animTimer = null;
@@ -623,7 +642,23 @@
         r.audio.spectrum.peaks[0].db.toFixed(1) + ' dB' : '-');
       labTd(tr, String(r.audio.wav.bytes));
       labTd(tr, r.audio.rms.toFixed(3));
+      function selectRow() {
+        labSel = { preset: r.preset, voice: r.voice };
+        labSyncSelects();
+        labRenderTable();
+        labRenderProfile();
+        labRenderSpectrum();
+      }
       var cell = labTd(tr, '');
+      var view = document.createElement('button');
+      view.type = 'button';
+      view.textContent = 'View';
+      view.setAttribute('aria-label', 'Show ' + r.preset + ' with ' + r.audio.label + ' in the charts');
+      view.addEventListener('click', function (e) {
+        e.stopPropagation();
+        selectRow();
+      });
+      cell.appendChild(view);
       var b = document.createElement('button');
       b.type = 'button';
       b.textContent = 'Apply';
@@ -633,13 +668,7 @@
         labApplyToBench(r.preset, r.voice);
       });
       cell.appendChild(b);
-      tr.addEventListener('click', function () {
-        labSel = { preset: r.preset, voice: r.voice };
-        labSyncSelects();
-        labRenderTable();
-        labRenderProfile();
-        labRenderSpectrum();
-      });
+      tr.addEventListener('click', selectRow);
       body.appendChild(tr);
     });
   }

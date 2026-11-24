@@ -693,3 +693,72 @@ test('generate_data_uri checks byte length not character length', () => {
   const g = fs.readFileSync(path.join(ROOT, 'tools/generate_data_uri.js'), 'utf8');
   assert.match(g, /Buffer\.byteLength\(html\)/);
 });
+
+/* ---------- revamp regression coverage ---------- */
+
+test('wavelength frequency conversion helpers repair hostile inputs', () => {
+  assert.equal(N.frequencyToWavelength(0), N.SPEED_OF_SOUND);
+  assert.equal(N.frequencyToWavelength(-10), N.SPEED_OF_SOUND);
+  assert.equal(N.frequencyToWavelength(NaN), N.SPEED_OF_SOUND);
+  assert.equal(N.wavelengthToFrequency(0), N.SPEED_OF_SOUND);
+  assert.equal(N.wavelengthToFrequency(-2), N.SPEED_OF_SOUND);
+  assert.equal(N.wavelengthToFrequency(Infinity), N.SPEED_OF_SOUND);
+});
+
+test('fringe helpers stay finite for hostile optical inputs', () => {
+  assert.ok(Number.isFinite(N.fringeSpacing(0, 0, NaN)));
+  assert.ok(Number.isFinite(N.fringeSpacing(-2, -4, -100)));
+  assert.equal(N.isConstructive(0, 0), true);
+  assert.equal(N.isDestructive(0.5, 0), true);
+});
+
+test('phasor superposition and path difference tolerate malformed source entries', () => {
+  assert.doesNotThrow(() => N.phasorAt([null, 4, {}], 2, 3, 10));
+  assert.doesNotThrow(() => N.superpose([null, 4, {}], 2, 3, 10, 0, 0, 0));
+  assert.doesNotThrow(() => N.intensityAt(null, 2, 3, 10, 0));
+  assert.doesNotThrow(() => N.pathDifference([null, { x: 1 }], 2, 3));
+});
+
+test('workbench measures slit separation as Euclidean distance', () => {
+  const probe = APP.slice(APP.indexOf('function updateProbe'), APP.indexOf('/* ---------- Synth'));
+  assert.match(probe, /Math\.hypot\(srcs\[1\]\.x - srcs\[0\]\.x, srcs\[1\]\.y - srcs\[0\]\.y\)/);
+  assert.equal(/Math\.abs\(srcs\[1\]\.x - srcs\[0\]\.x\)/.test(probe), false);
+});
+
+test('frequency and note controls synchronize before state capture', () => {
+  const wired = APP.slice(APP.indexOf("['wl', 'sp'"), APP.indexOf('/* Keep note and frequency'));
+  assert.equal(/'freq'/.test(wired), false);
+  assert.equal(/'midi'/.test(wired), false);
+  const midi = APP.slice(APP.indexOf("$('midi').addEventListener('input'"), APP.indexOf("$('freq').addEventListener('input'"));
+  const freq = APP.slice(APP.indexOf("$('freq').addEventListener('input'"), APP.indexOf("$('srcCount').addEventListener"));
+  assert.match(midi, /onControlsChanged\(\)/);
+  assert.match(freq, /onControlsChanged\(\)/);
+});
+
+test('page has a keyboard skip link into the main landmark', () => {
+  assert.match(IDX, /<a class="skip-link" href="#main">Skip to main content<\/a>/);
+  assert.match(IDX, /<main id="main">/);
+  assert.match(IDX, /\.skip-link:focus/);
+});
+
+test('reduced motion users get a stepwise motion alternative', () => {
+  assert.match(APP, /prefers-reduced-motion: reduce/);
+  assert.match(APP, /Step motion/);
+  assert.match(APP, /advanced one frame/);
+});
+
+test('comparator rows expose keyboard selection through a real button', () => {
+  assert.match(APP, /view\.textContent = 'View'/);
+  assert.match(APP, /view\.setAttribute\('aria-label', 'Show '/);
+  assert.match(APP, /view\.addEventListener\('click'/);
+});
+
+test('functional copy and controls meet legibility and touch floors', () => {
+  assert.equal(/font-size:10px/.test(IDX), false);
+  assert.match(IDX, /\.row label\{[^}]*font-size:12px/);
+  assert.match(IDX, /\.legend\{[^}]*font-size:12px/);
+  assert.match(IDX, /\.note\{[^}]*font-size:12px/);
+  assert.match(IDX, /\.pill\{[^}]*font-size:11px/);
+  assert.match(IDX, /\.stat\{[^}]*padding:6px 0/);
+  assert.match(IDX, /button\{[^}]*min-height:24px/);
+});

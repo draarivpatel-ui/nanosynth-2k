@@ -61,12 +61,19 @@
     return TAU / ((w > 0 && isFinite(w)) ? w : 1);
   }
 
+  function positiveOr(value, fallback) {
+    var v = Number(value);
+    return (v > 0 && isFinite(v)) ? v : fallback;
+  }
+
   function frequencyToWavelength(freq, speed) {
-    return (speed === undefined ? SPEED_OF_SOUND : speed) / freq;
+    var sp = positiveOr(speed === undefined ? SPEED_OF_SOUND : speed, SPEED_OF_SOUND);
+    return sp / positiveOr(freq, 1);
   }
 
   function wavelengthToFrequency(wavelength, speed) {
-    return (speed === undefined ? SPEED_OF_SOUND : speed) / wavelength;
+    var sp = positiveOr(speed === undefined ? SPEED_OF_SOUND : speed, SPEED_OF_SOUND);
+    return sp / positiveOr(wavelength, 1);
   }
 
   /* Every public optics entry point repairs non finite inputs instead of
@@ -77,11 +84,13 @@
   }
 
   function sourcePhase(source, x, y, k, t, omega) {
+    source = source && typeof source === 'object' ? source : {};
     var d = distance(num(source.x, 0), num(source.y, 0), num(x, 0), num(y, 0));
     return num(k, 0) * d - num(omega, 0) * num(t, 0) + num(source.phase, 0);
   }
 
   function waveDisplacement(source, x, y, k, t, omega, spreading) {
+    source = source && typeof source === 'object' ? source : {};
     var d = distance(num(source.x, 0), num(source.y, 0), num(x, 0), num(y, 0));
     var s = Math.max(0, num(spreading, 0));
     var a = num(source.amplitude === undefined ? 1 : source.amplitude, 1) /
@@ -90,6 +99,7 @@
   }
 
   function superpose(sources, x, y, wavelength, t, omega, spreading) {
+    if (!Array.isArray(sources)) return 0;
     var k = waveNumber(wavelength);
     var sum = 0;
     for (var i = 0; i < sources.length; i++) {
@@ -100,13 +110,14 @@
 
   /* Coherent phasor sum. Time independent for sources sharing one frequency. */
   function phasorAt(sources, x, y, wavelength, spreading) {
+    if (!Array.isArray(sources)) return { re: 0, im: 0 };
     var k = waveNumber(wavelength);
     var s = Math.max(0, num(spreading, 0));
     var px = num(x, 0), py = num(y, 0);
     var re = 0;
     var im = 0;
     for (var i = 0; i < sources.length; i++) {
-      var src = sources[i];
+      var src = sources[i] && typeof sources[i] === 'object' ? sources[i] : {};
       var d = distance(num(src.x, 0), num(src.y, 0), px, py);
       var a = num(src.amplitude === undefined ? 1 : src.amplitude, 1) /
         Math.sqrt(1 + s * d);
@@ -154,28 +165,40 @@
   /* Path difference against the first source. Two sources give a scalar. */
   function pathDifference(sources, x, y) {
     if (!Array.isArray(sources) || sources.length < 2) return 0;
-    var d0 = distance(sources[0].x, sources[0].y, x, y);
+    var a = sources[0] && typeof sources[0] === 'object' ? sources[0] : {};
+    var d0 = distance(num(a.x, 0), num(a.y, 0), num(x, 0), num(y, 0));
     var diffs = [];
     for (var i = 1; i < sources.length; i++) {
-      diffs.push(d0 - distance(sources[i].x, sources[i].y, x, y));
+      var b = sources[i] && typeof sources[i] === 'object' ? sources[i] : {};
+      diffs.push(d0 - distance(num(b.x, 0), num(b.y, 0), num(x, 0), num(y, 0)));
     }
     return diffs.length === 1 ? diffs[0] : diffs;
   }
 
   /* Young double slit fringe spacing on a distant screen. */
   function fringeSpacing(wavelength, separation, screenDistance) {
-    return wavelength * screenDistance / separation;
+    return positiveOr(wavelength, 1) * positiveOr(screenDistance, 1) /
+      positiveOr(separation, 1);
+  }
+
+  function cleanWavelength(wavelength) {
+    return positiveOr(wavelength, 1);
+  }
+
+  function cleanTolerance(tol) {
+    tol = tol === undefined ? 1e-6 : Math.abs(Number(tol));
+    return isFinite(tol) ? tol : 1e-6;
   }
 
   function isConstructive(pathDiff, wavelength, tol) {
-    tol = tol === undefined ? 1e-6 : tol;
-    var n = pathDiff / wavelength;
+    tol = cleanTolerance(tol);
+    var n = num(pathDiff, 0) / cleanWavelength(wavelength);
     return Math.abs(n - Math.round(n)) <= tol;
   }
 
   function isDestructive(pathDiff, wavelength, tol) {
-    tol = tol === undefined ? 1e-6 : tol;
-    var n = pathDiff / wavelength - 0.5;
+    tol = cleanTolerance(tol);
+    var n = num(pathDiff, 0) / cleanWavelength(wavelength) - 0.5;
     return Math.abs(n - Math.round(n)) <= tol;
   }
 

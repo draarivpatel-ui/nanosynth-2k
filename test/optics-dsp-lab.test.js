@@ -1357,3 +1357,25 @@ test('app.js share link builds the bookmark from live bench state', () => {
   assert.match(share, /LAB\.detectPresetName\(state\.sources\)/);
   assert.match(share, /LAB\.encodeBookmark\(/);
 });
+
+/* ---------- revamp regression coverage ---------- */
+
+test('utf8FromBytes rejects overlong encodings', () => {
+  assert.equal(L.utf8FromBytes([0xc0, 0x80]), null);
+  assert.equal(L.utf8FromBytes([0xe0, 0x80, 0x80]), null);
+  assert.equal(L.utf8FromBytes([0xf0, 0x80, 0x80, 0x80]), null);
+});
+
+test('utf8FromBytes rejects encoded surrogates and out of range codepoints', () => {
+  assert.equal(L.utf8FromBytes([0xed, 0xa0, 0x80]), null);
+  assert.equal(L.utf8FromBytes([0xed, 0xbf, 0xbf]), null);
+  assert.equal(L.utf8FromBytes([0xf4, 0x90, 0x80, 0x80]), null);
+  assert.equal(L.utf8FromBytes([0xf5, 0x80, 0x80, 0x80]), null);
+});
+
+test('magnitudeDb normalizes the DC bin as a true amplitude', () => {
+  const n = 256;
+  const dc = new Float64Array(n).fill(0.5);
+  const s = L.magnitudeDb(dc, { sampleRate: 1000, fftSize: n });
+  assert.ok(Math.abs(s.magsDb[0] - 20 * Math.log10(0.5)) < 1e-9, String(s.magsDb[0]));
+});

@@ -236,23 +236,31 @@
   }
 
   function utf8FromBytes(bytes) {
+    if (!bytes || typeof bytes.length !== 'number') return null;
     var out = '';
+    function continuation(b) {
+      return b >= 0x80 && b <= 0xbf;
+    }
     for (var i = 0; i < bytes.length; i++) {
       var b = bytes[i];
+      if (!Number.isInteger(b) || b < 0 || b > 0xff) return null;
       if (b < 0x80) {
         out += String.fromCharCode(b);
-      } else if (b >= 0xc0 && b < 0xe0 && i + 1 < bytes.length) {
+      } else if (b >= 0xc2 && b <= 0xdf && i + 1 < bytes.length) {
         var b2 = bytes[++i];
-        if ((b2 & 0xc0) !== 0x80) { i--; return null; }
+        if (!continuation(b2)) return null;
         out += String.fromCharCode(((b & 31) << 6) | (b2 & 63));
-      } else if (b >= 0xe0 && b < 0xf0 && i + 2 < bytes.length) {
+      } else if (b >= 0xe0 && b <= 0xef && i + 2 < bytes.length) {
         var c2 = bytes[++i], c3 = bytes[++i];
-        if ((c2 & 0xc0) !== 0x80 || (c3 & 0xc0) !== 0x80) return null;
-        out += String.fromCharCode(((b & 15) << 12) | ((c2 & 63) << 6) | (c3 & 63));
-      } else if (b >= 0xf0 && i + 3 < bytes.length) {
+        if (!continuation(c2) || !continuation(c3)) return null;
+        var cp3 = ((b & 15) << 12) | ((c2 & 63) << 6) | (c3 & 63);
+        if (cp3 < 0x800 || (cp3 >= 0xd800 && cp3 <= 0xdfff)) return null;
+        out += String.fromCharCode(cp3);
+      } else if (b >= 0xf0 && b <= 0xf4 && i + 3 < bytes.length) {
         var d2 = bytes[++i], d3 = bytes[++i], d4 = bytes[++i];
-        if ((d2 & 0xc0) !== 0x80 || (d3 & 0xc0) !== 0x80 || (d4 & 0xc0) !== 0x80) return null;
+        if (!continuation(d2) || !continuation(d3) || !continuation(d4)) return null;
         var cp = ((b & 7) << 18) | ((d2 & 63) << 12) | ((d3 & 63) << 6) | (d4 & 63);
+        if (cp < 0x10000 || cp > 0x10ffff) return null;
         cp -= 0x10000;
         out += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 1023));
       } else {
@@ -337,7 +345,7 @@
     for (i = 0; i < half; i++) {
       var m = Math.sqrt(re[i] * re[i] + im[i] * im[i]);
       mags[i] = m;
-      var amp = (2 * m) / size;
+      var amp = (i === 0 ? m : 2 * m) / size;
       magsDb[i] = amp > 0 ? Math.max(-180, 20 * Math.log10(amp)) : -180;
     }
     var sr = clamp(opts.sampleRate, 1, 1e9, 44100);
