@@ -39,7 +39,7 @@
 
   /* Mulberry32. Small, fast, fully deterministic across engines. */
   function rng(seed) {
-    var s = (seed >>> 0) || 1;
+    var s = seed === undefined ? 1 : (seed >>> 0);
     return function () {
       s = (s + 0x6D2B79F5) | 0;
       var t = Math.imul(s ^ (s >>> 15), 1 | s);

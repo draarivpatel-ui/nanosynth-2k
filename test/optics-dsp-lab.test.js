@@ -1075,8 +1075,8 @@ test('the lab table declares eleven columns', () => {
 });
 
 test('both lab svgs are focusable charts with accessible names', () => {
-  assert.match(IDX, /<svg id="labProfile" class="chart" viewBox="0 0 640 200" role="img"\s+aria-label="[^"]+"/);
-  assert.match(IDX, /<svg id="labSpectrum" class="chart" viewBox="0 0 640 200" role="img"\s+aria-label="[^"]+"/);
+  assert.match(IDX, /<svg id="labProfile" class="chart" viewBox="0 0 640 200" role="group"\s+aria-label="[^"]+"/);
+  assert.match(IDX, /<svg id="labSpectrum" class="chart" viewBox="0 0 640 200" role="group"\s+aria-label="[^"]+"/);
 });
 
 test('the inline lab svgs carry no xmlns url attribute', () => {

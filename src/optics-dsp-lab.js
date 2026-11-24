@@ -232,6 +232,10 @@
         bytes.push((val >>> bits) & 0xff);
       }
     }
+    /* Strict means canonical: unused low bits in the final base64url
+       character must be zero. Re-encoding the decoded bytes is the exact
+       check and rejects otherwise undetectable twin encodings. */
+    if (bytesToBase64Url(bytes) !== str) return null;
     return bytes;
   }
 
@@ -287,7 +291,7 @@
   function fft(re, im) {
     if (!re || !im || re.length !== im.length) return false;
     var n = re.length;
-    if (n < 2 || (n & (n - 1)) !== 0) return false;
+    if (n < 1 || (n & (n - 1)) !== 0) return false;
     var i, j;
     for (i = 1, j = 0; i < n; i++) {
       var bit = n >> 1;
