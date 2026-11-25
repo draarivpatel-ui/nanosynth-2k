@@ -51,3 +51,14 @@ test('interactive lab charts use group roles so probes stay exposed', () => {
   assert.match(IDX, /<svg id="labProfile" class="chart" viewBox="0 0 640 200" role="group"\s+aria-label="[^"]+"/);
   assert.match(IDX, /<svg id="labSpectrum" class="chart" viewBox="0 0 640 200" role="group"\s+aria-label="[^"]+"/);
 });
+
+test('mobile comparator keeps row actions inside the viewport', () => {
+  const mobile = IDX.slice(IDX.indexOf('@media(max-width:560px)'), IDX.indexOf('</style>'));
+  assert.match(mobile, /table\.lab\{table-layout:fixed;width:100%;font-size:11px/);
+  assert.match(mobile, /table\.lab th:nth-child\(n\+4\):nth-child\(-n\+10\),\s*table\.lab td:nth-child\(n\+4\):nth-child\(-n\+10\)\{display:none\}/);
+  assert.match(mobile, /table\.lab td:last-child button\{display:block;width:100%/);
+});
+
+test('range inputs meet the 24 px target height floor', () => {
+  assert.match(IDX, /input\[type=range\]\{[^}]*min-height:24px/);
+});

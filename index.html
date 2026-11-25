@@ -35,7 +35,7 @@
   .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
   .row label{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--dim);flex:1;min-width:96px}
   .row label b{color:var(--ink);font-weight:400}
-  input[type=range]{width:100%;accent-color:var(--accent)}
+  input[type=range]{width:100%;accent-color:var(--accent);min-height:24px}
   input[type=number],input[type=text],select,textarea{font:inherit;background:var(--panel2);
     color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px 6px;width:100%}
   textarea{resize:vertical;min-height:74px;font-size:12px}
@@ -90,6 +90,18 @@
   #labTests li.bad{color:var(--warn)}
   footer{padding:14px 20px;border-top:1px solid var(--line);color:var(--dim);font-size:12px}
   code{color:var(--accent2)}
+  @media(max-width:560px){
+    table.lab{table-layout:fixed;width:100%;font-size:11px}
+    table.lab th,table.lab td{padding:4px 3px;white-space:normal;overflow-wrap:anywhere}
+    table.lab th:nth-child(n+4):nth-child(-n+10),
+    table.lab td:nth-child(n+4):nth-child(-n+10){display:none}
+    table.lab th:nth-child(1),table.lab td:nth-child(1){width:29%}
+    table.lab th:nth-child(2),table.lab td:nth-child(2){width:31%}
+    table.lab th:nth-child(3),table.lab td:nth-child(3){width:16%}
+    table.lab th:nth-child(11),table.lab td:nth-child(11){width:24%}
+    table.lab td:last-child button{display:block;width:100%;margin:2px 0;
+      padding-left:4px;padding-right:4px}
+  }
 </style>
 </head>
 <body>
