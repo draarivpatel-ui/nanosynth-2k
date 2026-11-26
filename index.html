@@ -102,6 +102,18 @@
     table.lab td:last-child button{display:block;width:100%;margin:2px 0;
       padding-left:4px;padding-right:4px}
   }
+
+  @media print{
+    :root{--bg:#fff;--panel:#fff;--panel2:#fff;--line:#777;--ink:#111;--dim:#333;
+      --accent:#444;--accent2:#333;--warn:#555}
+    body{background:#fff;color:#111}
+    .skip-link,button,input,select,textarea,.tag{display:none}
+    main{display:block;padding:0}
+    .card{border-color:#777;break-inside:avoid}
+    .labScroll{overflow:visible}
+    #labTests{max-height:none;overflow:visible}
+    canvas,svg.chart{background:#fff}
+  }
 </style>
 </head>
 <body>
