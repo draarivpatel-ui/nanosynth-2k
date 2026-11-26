@@ -49,7 +49,7 @@ node tools/generate_data_uri.js
 | `app.js` | Workbench controller, rendering, audio, and state UI |
 | `src/nanosynth.js` | Shared math core, usable in Node and the browser |
 | `src/optics-dsp-lab.js` | Optics fringe and harmonic spectrum lab: far-field profiles, radix-2 FFT, pitch tracking, SHA-256 audited exports, and the `#ns=` share codec |
-| `test/` | 390+ `node --test` unit tests, including hostile-input hardening coverage |
+| `test/` | 414 `node --test` unit tests, including hostile-input hardening coverage |
 | `shrink.html` | Standalone sandbox, under 2,950 bytes |
 | `DATA_URI.txt` | Copyable `data:text/html,...` URI on its last line, under 3,072 bytes |
 | `tools/generate_data_uri.js` | Regenerates `DATA_URI.txt` deterministically |

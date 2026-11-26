@@ -676,8 +676,9 @@
      prefix a single quote on cells that a spreadsheet would read as a
      formula (= + - @ or a leading tab/CR). */
   function csvCell(v) {
+    var numeric = typeof v === 'number' && Number.isFinite(v);
     var s = v === null || v === undefined ? '' : String(v);
-    if (/^[\t\r ]*[=+\-@]/.test(s)) s = "'" + s;
+    if (!numeric && /^[\s\p{Cf}\p{Cc}]*[=+\-@\t\r]/u.test(s)) s = "'" + s;
     if (/[",\r\n]/.test(s) || s !== s.trim()) s = '"' + s.replace(/"/g, '""') + '"';
     return s;
   }

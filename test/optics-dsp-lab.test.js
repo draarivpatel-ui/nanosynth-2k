@@ -1379,3 +1379,12 @@ test('magnitudeDb normalizes the DC bin as a true amplitude', () => {
   const s = L.magnitudeDb(dc, { sampleRate: 1000, fftSize: n });
   assert.ok(Math.abs(s.magsDb[0] - 20 * Math.log10(0.5)) < 1e-9, String(s.magsDb[0]));
 });
+
+
+test('batch4 csv guard covers invisible unicode prefixes and numeric negatives', () => {
+  for (const input of ['\u200b=cmd', '\ufeff=cmd', '\u00a0=cmd', '\u2060@cmd', ' \u200b\t=cmd']) {
+    const out = L.csvCell(input);
+    assert.ok(out.startsWith("'") || out.startsWith("\"'"), input + ' -> ' + out);
+  }
+  assert.ok(!String(L.csvCell(-12.5)).includes("'"));
+});
