@@ -389,6 +389,13 @@ test('no source file has media elements or an autoplay attribute', () => {
   }
 });
 
+test('every shipped page declares the document language', () => {
+  for (const f of ['index.html', 'shrink.html']) {
+    const s = fs.readFileSync(path.join(ROOT, f), 'utf8');
+    assert.match(s, /<html[^>]*\slang\s*=\s*["']?en["']?/i, f + ' needs lang=en');
+  }
+});
+
 test('no source file uses scroll-behavior smooth', () => {
   for (const f of ['index.html', 'app.js', 'src/nanosynth.js', 'shrink.html', 'README.md']) {
     const s = fs.readFileSync(path.join(ROOT, f), 'utf8');
